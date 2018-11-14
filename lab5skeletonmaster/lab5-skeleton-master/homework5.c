@@ -42,11 +42,19 @@ char * request_pdf = "HTTP/1.0 200 OK\r\n"
 const char * request_notfound  = "HTTP/1.0 404 NOT FOUND\r\n"
         "Content-type: text/html; charset=UTF-8\r\n\r\n";
 
-char * error_display = "<!DCOCTYPE html> \n"
-           "<html>\n"
-           "<head>\n"
-          "<h1 style = \"color:green\"404 NOT FOUND <br> </h>"
-          "</html>";
+char * error_display = "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 3.2 Final//EN\"><html>"
+        "<title>404 ERROR NOT FOUND</title>"
+"<body>"
+"<h2>404 ERROR NOT FOUND</h2><hr><ul>";
+  
+
+
+
+
+
+
+
+
 
 char * generate_404( char * tmp_file) {
    char * temp = malloc(512);
@@ -138,7 +146,8 @@ void serve_request(int client_fd){
   }
   
   else if((stat(filename, &file_stat)) == -1) {
-       send(client_fd, generate_404(filename), strlen(generate_404(filename)),0);
+       send(client_fd, request_notfound, strlen(request_notfound), 0);
+       send(client_fd, error_display, strlen(error_display),0);
   } 
   close(client_fd);
   return;
