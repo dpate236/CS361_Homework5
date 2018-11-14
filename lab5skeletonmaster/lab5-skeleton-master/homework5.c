@@ -12,14 +12,47 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include <dirent.h>
+
 
 #define BACKLOG (10)
+#define DIRECTORY_LISTING_MAX_CHAR 1013 // can get overflow if have a large directory and not enough characters
+
 
 void serve_request(int);
 
 char * request_str = "HTTP/1.0 200 OK\r\n"
         "Content-type: text/html; charset=UTF-8\r\n\r\n";
 
+char * request_txt = "HTTP/1.0 200 OK\r\n"
+        "Content-type: text/plain; charset=UTF-8\r\n\r\n";
+
+char * request_jpeg = "HTTP/1.0 200 OK\r\n"
+        "Content-type: image/jpeg; charset=UTF-8\r\n\r\n"; 
+
+char * request_gif = "HTTP/1.0 200 OK\r\n"
+        "Content-type: image/gif; charset=UTF-8\r\n\r\n";
+
+char * request_png = "HTTP/1.0 200 OK\r\n"
+        "Content-type: image/png; charset=UTF-8\r\n\r\n";
+ 
+char * request_pdf = "HTTP/1.0 200 OK\r\n"
+        "Content-type: application/pdf; charset=UTF-8\r\n\r\n";
+
+const char * request_notfound  = "HTTP/1.0 404 NOT FOUND\r\n"
+        "Content-type: text/html; charset=UTF-8\r\n\r\n";
+
+char * error_display = "<!DCOCTYPE html> \n"
+           "<html>\n"
+           "<head>\n"
+          "<h1 style = \"color:green\"404 NOT FOUND <br> </h>"
+          "</html>";
+
+char * generate_404( char * tmp_file) {
+   char * temp = malloc(512);
+   sprintf(temp, request_notfound, error_display);
+   return temp; 
+}
 
 char * index_hdr = "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 3.2 Final//EN\"><html>"
         "<title>Directory listing for %s</title>"
@@ -71,22 +104,76 @@ void serve_request(int client_fd){
       break;
   }
   requested_file = parseRequest(client_buf);
-  send(client_fd,request_str,strlen(request_str),0);
-  // take requested_file, add a . to beginning, open that file
+  struct stat file_stat;
+   
   filename[0] = '.';
   strncpy(&filename[1],requested_file,4095);
   read_fd = open(filename,0,0);
-  while(1){
+
+  if((stat(filename, &file_stat) == 0)){
+     if(strstr(filename, ".gif")){
+       send(client_fd, request_gif, strlen(request_gif), 0);
+      }
+     if(strstr(filename, ".png")){
+       send(client_fd, request_png, strlen(request_png), 0);
+      }
+     if(strstr(filename, ".jpeg")){
+       send(client_fd, request_jpeg, strlen(request_jpeg),0);
+      }
+     if(strstr(filename, ".pdf")){
+       send(client_fd, request_pdf, strlen(request_pdf), 0);
+      }
+     if(strstr(filename, ".html")){
+       send(client_fd, request_txt, strlen(request_txt), 0);
+      }
+ 
+   
+    while(1){
     bytes_read = read(read_fd,send_buf,4096);
     if(bytes_read == 0)
       break;
-
     send(client_fd,send_buf,bytes_read,0);
+    }    
+    close(read_fd);
   }
-  close(read_fd);
+  
+  else if((stat(filename, &file_stat)) == -1) {
+       send(client_fd, generate_404(filename), strlen(generate_404(filename)),0);
+  } 
   close(client_fd);
   return;
 }
+
+
+char* get_directory_contents(char* directory_path)
+{
+  char* directory_listing = NULL;
+
+  // open directory path up
+  DIR* path = opendir(directory_path);
+
+  // check to see if opening up directory was successful
+  if(path != NULL)
+  {
+      directory_listing = (char*) malloc(sizeof(char)*DIRECTORY_LISTING_MAX_CHAR);
+      directory_listing[0] = '\0';
+
+      // stores underlying info of files and sub_directories of directory_path
+      struct dirent* underlying_file = NULL;
+
+      // iterate through all of the  underlying files of directory_path
+      while((underlying_file = readdir(path)) != NULL)
+      {
+          strcat(directory_listing, underlying_file->d_name);
+          strcat(directory_listing, "\n");
+      }
+
+      closedir(path);
+  }
+
+  return directory_listing;
+}
+
 
 /* Your program should take two arguments:
  * 1) The port number on which to bind and listen for connections, and
@@ -95,6 +182,16 @@ void serve_request(int client_fd){
 int main(int argc, char** argv) {
     /* For checking return values. */
     int retval;
+    
+    char * dir_filecontent = get_directory_contents(argv[2]);
+    if(dir_filecontent == NULL){
+        printf("FILE NOT FOUND");
+     } else {
+        printf("Contents of %s are:\n", argv[2]);
+        printf("%s\n", dir_filecontent); 
+    } 
+
+
 
     /* Read the port number from the first command line argument. */
     int port = atoi(argv[1]);
@@ -139,7 +236,9 @@ int main(int argc, char** argv) {
     addr.sin6_port = htons(port); // byte order is significant
     addr.sin6_addr = in6addr_any; // listen to all interfaces
 
-    
+   
+
+ 
     /* As its name implies, this system call asks the OS to bind the socket to
      * address and port specified above. */
     retval = bind(server_sock, (struct sockaddr*)&addr, sizeof(addr));
