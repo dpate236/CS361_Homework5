@@ -21,12 +21,10 @@
 #define FILE_DOESNOTEXIST -1
 #define DIRECTORY_LISTING_MAX_CHAR 1013 // can get overflow if have a large directory and not enough characters
 
-struct thread_arg {
- int sock_number;
- };
-
 
 void serve_request(int);
+
+//http extension were needed to help us knowing which file extension are in the directory
 
 char * request_str = "HTTP/1.0 200 OK\r\n"
         "Content-type: text/html; charset=UTF-8\r\n\r\n";
@@ -49,6 +47,7 @@ char * request_pdf = "HTTP/1.0 200 OK\r\n"
 const char * request_notfound  = "HTTP/1.0 404 NOT FOUND\r\n"
         "Content-type: text/html; charset=UTF-8\r\n\r\n";
 
+//404 file extension to display webpage in html format refernce is directly from professors skeleton code 
 char * error_display = "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 3.2 Final//EN\"><html>"
         "<title>404 ERROR NOT FOUND</title>"
 "<body>"
@@ -61,11 +60,19 @@ char * error_directory = "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 3.2 Final//EN
 "<h2>404 DIRECTORY NOT FOUND</h2><hr><ul>";
 
 
+//This struct is need for creating thread argument
+struct thread_arg {
+ int sock_number;
+ };
+
+
+//creating buffer space for generate_404 error on the webpage
 char * generate_404( char * tmp_file) {
    char * temp = malloc(512);
    sprintf(temp, request_notfound, error_display);
    return temp; 
 }
+
 
 char * index_hdr = "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 3.2 Final//EN\"><html>"
         "<title>Directory listing for %s</title>"
@@ -76,8 +83,9 @@ char * index_hdr = "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 3.2 Final//EN\"><ht
 
 
 char * index_body = "<li><a href=\"%s\">%s</a>";
-
 char * index_ftr = "</ul><hr></body></html>";
+
+
 
 /* char* parseRequest(char* request)
  * Args: HTTP request of the form "GET /path/to/resource HTTP/1.X" 
@@ -88,6 +96,7 @@ char * index_ftr = "</ul><hr></body></html>";
  * Does not modify the given request string. 
  * The returned resource should be free'd by the caller function. 
  */
+
 char* parseRequest(char* request) {
   //assume file paths are no more than 256 bytes + 1 for null. 
   char *buffer = malloc(sizeof(char)*257);
@@ -123,21 +132,25 @@ void serve_request(int client_fd){
   strncpy(&filename[1],requested_file,4095);
   read_fd = open(filename,0,0);
 
-  if((stat(filename, &file_stat) == 0)){
+
+ //Reference from the lab directory_example file to get an idea for using stat check if the file exist or not
+ //Also using the strstr for string comparison came from skeleton code given 
+
+  if((stat(filename, &file_stat) == FILE_EXIST)){
     if(strstr(filename, ".gif")){
-       send(client_fd, request_gif, strlen(request_gif), 0);
+       send(client_fd, request_gif, strlen(request_gif), FILE_EXIST);
       }
     if(strstr(filename, ".png")){
-       send(client_fd, request_png, strlen(request_png), 0);
+       send(client_fd, request_png, strlen(request_png), FILE_EXIST);
       }
     if(strstr(filename, ".jpg")){
-       send(client_fd, request_jpg, strlen(request_jpg),0);
+       send(client_fd, request_jpg, strlen(request_jpg),FILE_EXIST);
       }
     if(strstr(filename, ".pdf")){
-       send(client_fd, request_pdf, strlen(request_pdf), 0);
+       send(client_fd, request_pdf, strlen(request_pdf), FILE_EXIST);
       }
     if(strstr(filename, ".html")){
-       send(client_fd, request_str, strlen(request_str), 0);
+       send(client_fd, request_str, strlen(request_str), FILE_EXIST);
       }
    
     while(1){
@@ -149,14 +162,16 @@ void serve_request(int client_fd){
     close(read_fd);
   }
         
-
+ 
+ //If the file does not exist then 404 page error is generated 
   else if((stat(filename, &file_stat)) == -1) {
-       send(client_fd, request_notfound, strlen(request_notfound), 0);
-       send(client_fd, error_display, strlen(error_display), 0);
+       send(client_fd, request_notfound, strlen(request_notfound), FILE_EXIST);
+       send(client_fd, error_display, strlen(error_display), FILE_EXIST);
   } 
   close(client_fd);
   return;
 }
+
 
 
 char* get_directory_contents(char* directory_path)
@@ -202,24 +217,25 @@ void *thread_function(void *argument_value){
 int main(int argc, char** argv) {
     /* For checking return values. */
     int retval;
-    int num_threads = 200;
+    
 
-    char * dir_filecontent = get_directory_contents(argv[2]);
+    char * dir_filecontent = get_directory_contents(argv[PATH_ARG2]);
     if(dir_filecontent == NULL){
         printf("FILE NOT FOUND");
      } else {
-        printf("Contents of %s are:\n", argv[2]);
+        printf("Contents of %s are:\n", argv[PATH_ARG2]);
         printf("%s\n", dir_filecontent); 
     } 
 
     /* Read the port number from the first command line argument. */
     int port = atoi(argv[1]);
- //   chdir(argv[PATH_ARG2]); 
 
+ 
+ int numberof_threads = 200; 
     /* Allocate some memory for the arguments that we're going to pass to our
      * threads when we create them. */
     struct thread_arg *arguments =
-        malloc(num_threads * sizeof(struct thread_arg));
+        malloc(numberof_threads * sizeof(struct thread_arg));
     if (arguments == NULL) {
         printf("malloc() failed\n");
         exit(1);
@@ -227,7 +243,7 @@ int main(int argc, char** argv) {
 
     /* Allocate some memory for the thread structures that the pthreads library
      * uses to store thread state information. */
-    pthread_t *threads = malloc(num_threads * sizeof(pthread_t));
+    pthread_t *threads = malloc(numberof_threads * sizeof(pthread_t));
     if (threads == NULL) {
         printf("malloc() failed\n");
         exit(1);
@@ -299,9 +315,9 @@ int main(int argc, char** argv) {
 
     while(1) {
         /* Declare a socket for the client connection. */
-        int sock;
+       // int sock;
         int count  = 0;
-        char buffer[256];
+      //  char buffer[256];
 
         /* Another address structure.  This time, the system will automatically
          * fill it in, when we accept a connection, to tell us where the
@@ -328,7 +344,6 @@ int main(int argc, char** argv) {
             printf("pthread_create() failed\n");
             exit(1);
         }
-       // pthread_detach(threads[count]);
         
          count = count  + 1;
 
