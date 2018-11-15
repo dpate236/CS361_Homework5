@@ -16,7 +16,14 @@
 
 
 #define BACKLOG (10)
+#define PATH_ARG2 2
+#define FILE_EXIST 0
+#define FILE_DOESNOTEXIST -1
 #define DIRECTORY_LISTING_MAX_CHAR 1013 // can get overflow if have a large directory and not enough characters
+
+struct thread_arg {
+ int sock_number;
+ };
 
 
 void serve_request(int);
@@ -27,8 +34,8 @@ char * request_str = "HTTP/1.0 200 OK\r\n"
 char * request_txt = "HTTP/1.0 200 OK\r\n"
         "Content-type: text/plain; charset=UTF-8\r\n\r\n";
 
-char * request_jpeg = "HTTP/1.0 200 OK\r\n"
-        "Content-type: image/jpeg; charset=UTF-8\r\n\r\n"; 
+char * request_jpg = "HTTP/1.0 200 OK\r\n"
+        "Content-type: image/jpg; charset=UTF-8\r\n\r\n"; 
 
 char * request_gif = "HTTP/1.0 200 OK\r\n"
         "Content-type: image/gif; charset=UTF-8\r\n\r\n";
@@ -45,15 +52,13 @@ const char * request_notfound  = "HTTP/1.0 404 NOT FOUND\r\n"
 char * error_display = "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 3.2 Final//EN\"><html>"
         "<title>404 ERROR NOT FOUND</title>"
 "<body>"
-"<h2>404 ERROR NOT FOUND</h2><hr><ul>";
-  
+"<h2>404 ERROR NOT FOUND</h2><hr><ul>"; 
 
 
-
-
-
-
-
+char * error_directory = "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 3.2 Final//EN\"><html>"
+        "<title>404 DIRECTORY NOT FOUND</title>"
+"<body>"
+"<h2>404 DIRECTORY NOT FOUND</h2><hr><ul>";
 
 
 char * generate_404( char * tmp_file) {
@@ -119,22 +124,21 @@ void serve_request(int client_fd){
   read_fd = open(filename,0,0);
 
   if((stat(filename, &file_stat) == 0)){
-     if(strstr(filename, ".gif")){
+    if(strstr(filename, ".gif")){
        send(client_fd, request_gif, strlen(request_gif), 0);
       }
-     if(strstr(filename, ".png")){
+    if(strstr(filename, ".png")){
        send(client_fd, request_png, strlen(request_png), 0);
       }
-     if(strstr(filename, ".jpeg")){
-       send(client_fd, request_jpeg, strlen(request_jpeg),0);
+    if(strstr(filename, ".jpg")){
+       send(client_fd, request_jpg, strlen(request_jpg),0);
       }
-     if(strstr(filename, ".pdf")){
+    if(strstr(filename, ".pdf")){
        send(client_fd, request_pdf, strlen(request_pdf), 0);
       }
-     if(strstr(filename, ".html")){
-       send(client_fd, request_txt, strlen(request_txt), 0);
+    if(strstr(filename, ".html")){
+       send(client_fd, request_str, strlen(request_str), 0);
       }
- 
    
     while(1){
     bytes_read = read(read_fd,send_buf,4096);
@@ -144,10 +148,11 @@ void serve_request(int client_fd){
     }    
     close(read_fd);
   }
-  
+        
+
   else if((stat(filename, &file_stat)) == -1) {
        send(client_fd, request_notfound, strlen(request_notfound), 0);
-       send(client_fd, error_display, strlen(error_display),0);
+       send(client_fd, error_display, strlen(error_display), 0);
   } 
   close(client_fd);
   return;
@@ -184,6 +189,12 @@ char* get_directory_contents(char* directory_path)
 }
 
 
+void *thread_function(void *argument_value){
+   struct thread_arg *my_argument = (struct thread_arg *) argument_value;
+    serve_request(my_argument->sock_number);
+    return NULL;
+}
+
 /* Your program should take two arguments:
  * 1) The port number on which to bind and listen for connections, and
  * 2) The directory out of which to serve files.
@@ -191,7 +202,8 @@ char* get_directory_contents(char* directory_path)
 int main(int argc, char** argv) {
     /* For checking return values. */
     int retval;
-    
+    int num_threads = 200;
+
     char * dir_filecontent = get_directory_contents(argv[2]);
     if(dir_filecontent == NULL){
         printf("FILE NOT FOUND");
@@ -200,10 +212,28 @@ int main(int argc, char** argv) {
         printf("%s\n", dir_filecontent); 
     } 
 
-
-
     /* Read the port number from the first command line argument. */
     int port = atoi(argv[1]);
+ //   chdir(argv[PATH_ARG2]); 
+
+    /* Allocate some memory for the arguments that we're going to pass to our
+     * threads when we create them. */
+    struct thread_arg *arguments =
+        malloc(num_threads * sizeof(struct thread_arg));
+    if (arguments == NULL) {
+        printf("malloc() failed\n");
+        exit(1);
+    }
+
+    /* Allocate some memory for the thread structures that the pthreads library
+     * uses to store thread state information. */
+    pthread_t *threads = malloc(num_threads * sizeof(pthread_t));
+    if (threads == NULL) {
+        printf("malloc() failed\n");
+        exit(1);
+    }
+   
+
 
     /* Create a socket to which clients will connect. */
     int server_sock = socket(AF_INET6, SOCK_STREAM, 0);
@@ -270,6 +300,7 @@ int main(int argc, char** argv) {
     while(1) {
         /* Declare a socket for the client connection. */
         int sock;
+        int count  = 0;
         char buffer[256];
 
         /* Another address structure.  This time, the system will automatically
@@ -284,23 +315,32 @@ int main(int argc, char** argv) {
          * there are no pending connections in the back log, this function will
          * block indefinitely while waiting for a client connection to be made.
          * */
-        sock = accept(server_sock, (struct sockaddr*) &remote_addr, &socklen);
-        if(sock < 0) {
+        arguments[count].sock_number  = accept(server_sock, (struct sockaddr*) &remote_addr, &socklen);
+        if(arguments[count].sock_number < 0) {
             perror("Error accepting connection");
             exit(1);
         }
 
         /* At this point, you have a connected socket (named sock) that you can
          * use to send() and recv(). */
+         int retval2 = pthread_create(&threads[count], NULL, thread_function, (void *) &arguments[count]);
+        if (retval2) {
+            printf("pthread_create() failed\n");
+            exit(1);
+        }
+       // pthread_detach(threads[count]);
+        
+         count = count  + 1;
 
         /* ALWAYS check the return value of send().  Also, don't hardcode
          * values.  This is just an example.  Do as I say, not as I do, etc. */
-        serve_request(sock);
+       // serve_request(sock);
 
         /* Tell the OS to clean up the resources associated with that client
          * connection, now that we're done with it. */
-        close(sock);
+      //  close(sock);
     }
-
+    free(arguments);
+    free(threads); 
     close(server_sock);
 }
