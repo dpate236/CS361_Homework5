@@ -1,3 +1,10 @@
+//Netid: dpate236
+//Name: Dhaval Patel
+//UIN: 665110910
+//CS 361 - Homework 5
+//Submit Date : Wednesday Novembe 14th, 2018.
+
+
 #include <fnmatch.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -173,7 +180,7 @@ void serve_request(int client_fd){
 }
 
 
-
+//Referenced from the directory_example.c file
 char* get_directory_contents(char* directory_path)
 {
   char* directory_listing = NULL;
@@ -203,7 +210,7 @@ char* get_directory_contents(char* directory_path)
   return directory_listing;
 }
 
-
+//Referenced from thread_example.c file 
 void *thread_function(void *argument_value){
    struct thread_arg *my_argument = (struct thread_arg *) argument_value;
     serve_request(my_argument->sock_number);
@@ -230,7 +237,8 @@ int main(int argc, char** argv) {
     /* Read the port number from the first command line argument. */
     int port = atoi(argv[1]);
 
- 
+ // Number of the threads for the webpage and making space for them by mallocing 
+ // Also Referenced from threading_example.c file
  int numberof_threads = 200; 
     /* Allocate some memory for the arguments that we're going to pass to our
      * threads when we create them. */
